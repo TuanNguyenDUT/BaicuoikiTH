@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<assembly xmlns="http://maven.apache.org/ASSEMBLY/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/ASSEMBLY/2.0.0 http://maven.apache.org/xsd/assembly-2.0.0.xsd">
+    <id>distribution</id>
+    <formats>
+        <format>zip</format>
+    </formats>
+    <includeBaseDirectory>true</includeBaseDirectory>
+    <fileSets>
+        <!-- Copy JAR files -->
+        <fileSet>
+            <directory>${project.build.directory}</directory>
+            <includes>
+                <include>exam-server-all.jar</include>
+            </includes>
+            <outputDirectory>.</outputDirectory>
+        </fileSet>
+        <!-- Copy sample input files -->
+        <fileSet>
+            <directory>${project.basedir}/input</directory>
+            <outputDirectory>input</outputDirectory>
+        </fileSet>
+        <!-- Copy output directory -->
+        <fileSet>
+            <directory>${project.basedir}/output</directory>
+            <outputDirectory>output</outputDirectory>
+        </fileSet>
+        <!-- Copy README and guides -->
+        <fileSet>
+            <directory>${project.basedir}</directory>
+            <includes>
+                <include>README.md</include>
+                <include>START_HERE.md</include>
+                <include>run-server.bat</include>
+                <include>run-client.bat</include>
+                <include>HUONG_DAN_*.md</include>
+            </includes>
+            <outputDirectory>.</outputDirectory>
+        </fileSet>
+    </fileSets>
+</assembly>
