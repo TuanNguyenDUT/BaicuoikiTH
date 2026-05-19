@@ -105,6 +105,69 @@ public class ExamClient {
     }
 
     /**
+     * Yêu cầu server lấy n phòng đầu + m cán bộ đầu từ file đã upload, rồi phân công
+     */
+    public boolean processFileWithNM(int n, int m) {
+        try {
+            writeString("PROCESS_FILE_WITH_NM:" + n + ":" + m);
+            dataOut.flush();
+            return receiveResults();
+        } catch (IOException e) {
+            System.out.println("Lỗi processFileWithNM: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Gửi n (phòng thi) và m (giám thị) để server tạo lịch phân công
+     */
+    public boolean processWithParams(int n, int m) {
+        try {
+            writeString("PROCESS_WITH_PARAMS:" + n + ":" + m);
+            dataOut.flush();
+            return receiveResults();
+        } catch (IOException e) {
+            System.out.println("Lỗi gửi tham số: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Đọc kết quả trả về từ server (dùng chung cho cả hai flow)
+     */
+    private boolean receiveResults() throws IOException {
+        phancongList = new ArrayList<>();
+        giamsatList = new ArrayList<>();
+        boolean success = false;
+        String line;
+        while (true) {
+            try {
+                line = readString();
+            } catch (EOFException e) {
+                break;
+            }
+            System.out.println("Nhận: " + line.substring(0, Math.min(50, line.length())));
+            if (line.startsWith("PHANCONG:")) {
+                String json = line.substring(9);
+                phancongList = gson.fromJson(json, new com.google.gson.reflect.TypeToken<List<PhancongGiamthi>>(){}.getType());
+                System.out.println("✓ Nhận " + phancongList.size() + " bản ghi phân công");
+            } else if (line.startsWith("GIAMSAT:")) {
+                String json = line.substring(8);
+                giamsatList = gson.fromJson(json, new com.google.gson.reflect.TypeToken<List<GiamsatHanhlang>>(){}.getType());
+                System.out.println("✓ Nhận " + giamsatList.size() + " bản ghi giám sát");
+            } else if (line.equals("DONE")) {
+                success = true;
+                System.out.println("✓ Xử lý hoàn thành!");
+                break;
+            } else if (line.startsWith("ERROR:")) {
+                System.out.println("✗ Lỗi từ server: " + line.substring(6));
+                break;
+            }
+        }
+        return success;
+    }
+
+    /**
      * Yêu cầu server xử lý và gửi kết quả
      */
     public boolean processAndGetResults() {

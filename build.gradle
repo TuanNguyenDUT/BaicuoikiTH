@@ -1,0 +1,78 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.exam'
+version = '1.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'org.apache.poi:poi:5.2.5'
+    implementation 'org.apache.poi:poi-ooxml:5.2.5'
+    implementation 'org.postgresql:postgresql:42.7.3'
+    implementation 'org.apache.logging.log4j:log4j-api:2.23.1'
+    implementation 'org.apache.logging.log4j:log4j-core:2.23.1'
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src/main/java']
+        }
+    }
+}
+
+// ─── Chạy Server ─────────────────────────────────────────────
+task runServer(type: JavaExec, dependsOn: classes) {
+    group = 'application'
+    description = 'Khởi động Exam Server'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'server.ServerGUI'
+}
+
+// ─── Chạy Client ─────────────────────────────────────────────
+task runClient(type: JavaExec, dependsOn: classes) {
+    group = 'application'
+    description = 'Khởi động Exam Client'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'client.ExamClient'
+}
+
+// ─── Build fat-JAR Server ─────────────────────────────────────
+task fatJarServer(type: Jar, dependsOn: classes) {
+    group = 'build'
+    archiveBaseName = 'exam-server'
+    archiveClassifier = 'all'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes 'Main-Class': 'server.ServerGUI'
+    }
+    from sourceSets.main.output
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
+// ─── Build fat-JAR Client ─────────────────────────────────────
+task fatJarClient(type: Jar, dependsOn: classes) {
+    group = 'build'
+    archiveBaseName = 'exam-client'
+    archiveClassifier = 'all'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes 'Main-Class': 'client.ExamClient'
+    }
+    from sourceSets.main.output
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}

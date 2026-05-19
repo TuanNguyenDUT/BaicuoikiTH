@@ -4,6 +4,7 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import model.*;
+import database.AssignmentRepository;
 import util.ExcelWriter;
 
 public class ServerGUI extends JFrame {
@@ -12,6 +13,7 @@ public class ServerGUI extends JFrame {
     private JTable giamsatTable;
     private JLabel statusLabel;
     private JTextArea messageLog;
+    private JLabel lineLabel;
 
     public ServerGUI(ExamServer server) {
         this.server = server;
@@ -40,6 +42,30 @@ public class ServerGUI extends JFrame {
         topPanel.add(statusPanel, BorderLayout.CENTER);
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 8));
+
+        lineLabel = new JLabel("Ca (line): ?");
+        lineLabel.setFont(new Font("Arial", Font.BOLD, 12));
+        lineLabel.setForeground(new Color(100, 0, 150));
+        buttonPanel.add(lineLabel);
+
+        JButton refreshLineBtn = new JButton("🔄 Xem ca hiện tại");
+        refreshLineBtn.addActionListener(e -> refreshLineLabel());
+        buttonPanel.add(refreshLineBtn);
+
+        JButton resetLineBtn = new JButton("❌ Reset về Ca 0 (test)");
+        resetLineBtn.setForeground(new Color(180, 0, 0));
+        resetLineBtn.addActionListener(e -> {
+            int confirm = JOptionPane.showConfirmDialog(this,
+                "Reset line về 0?\nLần chạy tiếp theo sẽ là Ca 0.",
+                "Xác nhận", JOptionPane.YES_NO_OPTION);
+            if (confirm == JOptionPane.YES_OPTION) {
+                AssignmentRepository.saveLine(0);
+                refreshLineLabel();
+                addMessage("⚠️ Đã reset line về 0. Ca tiếp theo sẽ dùng line=0.");
+            }
+        });
+        buttonPanel.add(resetLineBtn);
+
         JButton saveBtn = new JButton("Lưu kết quả ra file");
         saveBtn.addActionListener(e -> saveResults());
         buttonPanel.add(saveBtn);
@@ -85,6 +111,14 @@ public class ServerGUI extends JFrame {
     /**
      * Thêm dòng log — thread-safe, gọi được từ bất kỳ thread nào
      */
+    public void refreshLineLabel() {
+        new Thread(() -> {
+            int line = AssignmentRepository.getCurrentLine();
+            SwingUtilities.invokeLater(() ->
+                lineLabel.setText("Ca tiếp theo: line=" + line));
+        }).start();
+    }
+
     public void addMessage(String message) {
         String timestamp = new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date());
         String line = "[" + timestamp + "] " + message + "\n";
@@ -111,6 +145,7 @@ public class ServerGUI extends JFrame {
             statusLabel.setText("✅ Đã xử lý xong: " + pc + " phân công giám thị | " + gs + " giám sát hành lang");
             statusLabel.setForeground(new Color(0, 140, 0));
             setTitle("SERVER - Đã phân công xong (" + pc + " GV)");
+            refreshLineLabel();
         });
     }
 

@@ -5,6 +5,7 @@ import java.net.*;
 import java.util.*;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import database.AssignmentRepository;
 import model.*;
 import util.*;
 
@@ -66,16 +67,110 @@ public class ExamServer {
     }
 
     /**
+     * Sinh danh sách phòng thi tự động theo n
+     */
+    private List<PhongThi> generatePhongThi(int n) {
+        List<PhongThi> list = new ArrayList<>();
+        for (int i = 1; i <= n; i++) {
+            list.add(new PhongThi(i, String.format("P%03d", i), "Toà A"));
+        }
+        return list;
+    }
+
+    /**
+     * Sinh danh sách cán bộ tự động theo m
+     */
+    private List<CanBo> generateCanBo(int m) {
+        List<CanBo> list = new ArrayList<>();
+        for (int i = 1; i <= m; i++) {
+            list.add(new CanBo(i, String.format("CB%03d", i), "Cán bộ " + i, "", ""));
+        }
+        return list;
+    }
+
+    /**
+     * Phân công theo n phòng thi và m giám thị (dữ liệu sinh tự động)
+     */
+    public boolean performAssignment(int n, int m) {
+        try {
+            this.allPhongThi = generatePhongThi(n);
+            this.allCanBo    = generateCanBo(m);
+
+            AssignmentLogic logic = new AssignmentLogic(allCanBo, allPhongThi);
+            AssignmentRepository.initTable();
+            int Lmax = logic.tinhLmax();
+            int line = AssignmentRepository.getAndIncrementLine(Lmax);
+
+            System.out.println("n=" + n + ", m=" + m + ", Lmax=" + Lmax + ", line=" + line);
+            if (gui != null) gui.addMessage("📐 n=" + n + " phòng | m=" + m + " GV | Lmax=" + Lmax + " | line=" + line);
+
+            logic.doAssignment(line);
+            this.phancongList = logic.getPhancongList();
+            this.giamsatList  = logic.getGiamsatList();
+
+            System.out.println("Phân công hoàn thành!");
+            return true;
+        } catch (Exception e) {
+            System.out.println("Lỗi phân công: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Phân công dùng n phòng đầu + m cán bộ đầu từ file đã load
+     */
+    public boolean performAssignmentFileWithNM(int n, int m) {
+        try {
+            if (allPhongThi == null || allCanBo == null
+                    || allPhongThi.isEmpty() || allCanBo.isEmpty()) {
+                throw new RuntimeException("Chưa có dữ liệu file. Hãy gửi file trước!");
+            }
+            int useN = Math.min(n, allPhongThi.size());
+            int useM = Math.min(m, allCanBo.size());
+
+            List<PhongThi> subPhong = new ArrayList<>(allPhongThi.subList(0, useN));
+            List<CanBo>    subCanBo = new ArrayList<>(allCanBo.subList(0, useM));
+
+            AssignmentLogic logic = new AssignmentLogic(subCanBo, subPhong);
+            AssignmentRepository.initTable();
+            int Lmax = logic.tinhLmax();
+            int line  = AssignmentRepository.getAndIncrementLine(Lmax);
+
+            System.out.println("n=" + useN + ", m=" + useM + ", Lmax=" + Lmax + ", line=" + line);
+            if (gui != null) gui.addMessage("📐 n=" + useN + " phòng | m=" + useM + " GV | Lmax=" + Lmax + " | line=" + line);
+
+            logic.doAssignment(line);
+            this.phancongList = logic.getPhancongList();
+            this.giamsatList  = logic.getGiamsatList();
+
+            System.out.println("Phân công hoàn thành!");
+            return true;
+        } catch (Exception e) {
+            System.out.println("Lỗi phân công: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Thực hiện phân công
      */
     public boolean performAssignment() {
         try {
             AssignmentLogic logic = new AssignmentLogic(allCanBo, allPhongThi);
-            logic.doAssignment();
-            
+
+            // Khởi tạo bảng DB (nếu chưa có) và lấy line cho ca này
+            AssignmentRepository.initTable();
+            int Lmax = logic.tinhLmax();
+            int line = AssignmentRepository.getAndIncrementLine(Lmax);
+
+            System.out.println("Lmax = " + Lmax + ", sử dụng line = " + line);
+            if (gui != null) gui.addMessage("📐 Lmax=" + Lmax + " | Ca này dùng line=" + line);
+
+            logic.doAssignment(line);
+
             this.phancongList = logic.getPhancongList();
             this.giamsatList = logic.getGiamsatList();
-            
+
             System.out.println("Phân công hoàn thành!");
             return true;
         } catch (Exception e) {
@@ -199,7 +294,17 @@ class ClientHandler extends Thread {
                 }
                 System.out.println("Nhận yêu cầu: " + request);
 
-                if (request.equals("GET_PHANCONG")) {
+                if (request.startsWith("PROCESS_FILE_WITH_NM:")) {
+                    String[] parts = request.split(":");
+                    int n = Integer.parseInt(parts[1]);
+                    int m = Integer.parseInt(parts[2]);
+                    processFileWithNM(n, m);
+                } else if (request.startsWith("PROCESS_WITH_PARAMS:")) {
+                    String[] parts = request.split(":");
+                    int n = Integer.parseInt(parts[1]);
+                    int m = Integer.parseInt(parts[2]);
+                    processWithParams(n, m);
+                } else if (request.equals("GET_PHANCONG")) {
                     sendPhancong();
                 } else if (request.equals("GET_GIAMSAT")) {
                     sendGiamsat();
@@ -275,6 +380,68 @@ class ClientHandler extends Thread {
                 writeString("ERROR:" + e.getMessage());
                 dataOut.flush();
             } catch (IOException ex) { /* ignore */ }
+        }
+    }
+
+    /**
+     * Lấy n phòng đầu + m cán bộ đầu từ file đã load, phân công, gửi kết quả
+     */
+    private void processFileWithNM(int n, int m) {
+        try {
+            if (server.getGui() != null)
+                server.getGui().addMessage("⏳ Phân công từ file: n=" + n + " phòng, m=" + m + " cán bộ");
+
+            String canBoPath    = server.getTempCanBoPath();
+            String phongThiPath = server.getTempPhongThiPath();
+            if (canBoPath == null || phongThiPath == null
+                    || !server.loadExcelData(canBoPath, phongThiPath)) {
+                writeString("ERROR:Chưa nhận đủ file Excel từ client");
+                dataOut.flush();
+                return;
+            }
+
+            if (!server.performAssignmentFileWithNM(n, m)) {
+                writeString("ERROR:Lỗi phân công");
+                dataOut.flush();
+                return;
+            }
+
+            writeString("PHANCONG:" + gson.toJson(server.getPhancongList()));
+            writeString("GIAMSAT:"  + gson.toJson(server.getGiamsatList()));
+            writeString("DONE");
+            dataOut.flush();
+
+            if (server.getGui() != null) server.getGui().refreshDisplay();
+        } catch (Exception e) {
+            System.out.println("Lỗi processFileWithNM: " + e.getMessage());
+            try { writeString("ERROR:" + e.getMessage()); dataOut.flush(); } catch (IOException ex) { /* ignore */ }
+        }
+    }
+
+    /**
+     * Xử lý với tham số n, m và gửi kết quả
+     */
+    private void processWithParams(int n, int m) {
+        try {
+            System.out.println("Đang phân công với n=" + n + ", m=" + m);
+            if (server.getGui() != null)
+                server.getGui().addMessage("⏳ Client gửi n=" + n + " phòng, m=" + m + " giám thị");
+
+            if (!server.performAssignment(n, m)) {
+                writeString("ERROR:Lỗi phân công");
+                dataOut.flush();
+                return;
+            }
+
+            writeString("PHANCONG:" + gson.toJson(server.getPhancongList()));
+            writeString("GIAMSAT:"  + gson.toJson(server.getGiamsatList()));
+            writeString("DONE");
+            dataOut.flush();
+
+            if (server.getGui() != null) server.getGui().refreshDisplay();
+        } catch (Exception e) {
+            System.out.println("Lỗi processWithParams: " + e.getMessage());
+            try { writeString("ERROR:" + e.getMessage()); dataOut.flush(); } catch (IOException ex) { /* ignore */ }
         }
     }
 

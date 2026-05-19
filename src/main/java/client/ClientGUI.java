@@ -18,6 +18,10 @@ public class ClientGUI extends JFrame {
     private JButton saveBtn;
     private JTextField canBoFileField;
     private JTextField phongThiFileField;
+    private JTextField nField;
+    private JTextField mField;
+    private JLabel totalNLabel;
+    private JLabel totalMLabel;
     private JButton sendBtn;
 
     public ClientGUI(ExamClient client) {
@@ -34,61 +38,71 @@ public class ClientGUI extends JFrame {
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        // Top Panel - Connection
-        JPanel topPanel = new JPanel(new GridLayout(4, 1, 5, 5));
+        // Top Panel
+        JPanel topPanel = new JPanel(new GridLayout(5, 1, 4, 4));
 
-        // Connection info
-        JPanel connPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        // 1. Connection info
+        JPanel connPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
         connPanel.add(new JLabel("Server Host:"));
         hostField = new JTextField("localhost", 15);
         connPanel.add(hostField);
-        
         connPanel.add(new JLabel("Port:"));
         portField = new JTextField("5000", 8);
         connPanel.add(portField);
-        
         connectBtn = new JButton("Kết nối");
         connectBtn.addActionListener(e -> connect());
         connPanel.add(connectBtn);
-
         topPanel.add(connPanel);
 
-        // File selection panel - File cán bộ
-        JPanel canBoPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        canBoPanel.add(new JLabel("File Cán bộ:"));
-        canBoFileField = new JTextField(30);
+        // 2. File cán bộ + nhập m
+        JPanel canBoPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+        canBoPanel.setBorder(BorderFactory.createTitledBorder("File danh sách cán bộ côi thi"));
+        canBoFileField = new JTextField(28);
+        canBoFileField.setToolTipText("danhsachcanbocoithi.xlsx");
         canBoPanel.add(canBoFileField);
         JButton browseCanBoBtn = new JButton("Chọn...");
-        browseCanBoBtn.addActionListener(e -> chooseCanBoFile());
+        browseCanBoBtn.addActionListener(e -> chooseFile(canBoFileField, true));
         canBoPanel.add(browseCanBoBtn);
+        totalMLabel = new JLabel("(chưa chọn)");
+        totalMLabel.setForeground(Color.GRAY);
+        canBoPanel.add(totalMLabel);
+        canBoPanel.add(new JLabel("  Số cán bộ m:"));
+        mField = new JTextField("0", 5);
+        mField.setFont(new Font("Arial", Font.BOLD, 13));
+        canBoPanel.add(mField);
         topPanel.add(canBoPanel);
 
-        // File selection panel - File phòng thi
-        JPanel phongThiPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        phongThiPanel.add(new JLabel("File Phòng thi:"));
-        phongThiFileField = new JTextField(30);
+        // 3. File phòng thi + nhập n
+        JPanel phongThiPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+        phongThiPanel.setBorder(BorderFactory.createTitledBorder("File danh sách phòng thi"));
+        phongThiFileField = new JTextField(28);
+        phongThiFileField.setToolTipText("danhsachphongthi.xlsx");
         phongThiPanel.add(phongThiFileField);
         JButton browsePhongThiBtn = new JButton("Chọn...");
-        browsePhongThiBtn.addActionListener(e -> choosePhongThiFile());
+        browsePhongThiBtn.addActionListener(e -> chooseFile(phongThiFileField, false));
         phongThiPanel.add(browsePhongThiBtn);
+        totalNLabel = new JLabel("(chưa chọn)");
+        totalNLabel.setForeground(Color.GRAY);
+        phongThiPanel.add(totalNLabel);
+        phongThiPanel.add(new JLabel("  Số phòng n:"));
+        nField = new JTextField("0", 5);
+        nField.setFont(new Font("Arial", Font.BOLD, 13));
+        phongThiPanel.add(nField);
         topPanel.add(phongThiPanel);
 
-        // Action buttons
-        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
-        
-        sendBtn = new JButton("🚀 Gửi & Xử lý");
+        // 4. Action buttons
+        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 4));
+        sendBtn = new JButton("🚀 Tạo lịch phân công");
         sendBtn.setEnabled(false);
-        sendBtn.addActionListener(e -> sendFilesAndProcess());
+        sendBtn.addActionListener(e -> sendParamsAndProcess());
         actionPanel.add(sendBtn);
-
         saveBtn = new JButton("💾 Lưu kết quả Excel");
         saveBtn.setEnabled(false);
         saveBtn.addActionListener(e -> saveResults());
         actionPanel.add(saveBtn);
-
         topPanel.add(actionPanel);
 
-        // Status
+        // 5. Status
         statusLabel = new JLabel("Chưa kết nối...");
         statusLabel.setFont(new Font("Arial", Font.BOLD, 12));
         topPanel.add(statusLabel);
@@ -143,88 +157,121 @@ public class ClientGUI extends JFrame {
         }
     }
 
-    private void chooseCanBoFile() {
+    private void chooseFile(JTextField targetField, boolean isCanBo) {
         JFileChooser chooser = new JFileChooser();
-        int result = chooser.showOpenDialog(this);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            canBoFileField.setText(chooser.getSelectedFile().getAbsolutePath());
-        }
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Excel files", "xlsx", "xls"));
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
+
+        String path = chooser.getSelectedFile().getAbsolutePath();
+        targetField.setText(path);
+        if (isCanBo) totalMLabel.setText("⏳ đang đọc...");
+        else         totalNLabel.setText("⏳ đang đọc...");
+
+        new Thread(() -> {
+            try {
+                int count = isCanBo
+                    ? util.ExcelReader.readCanBo(path).size()
+                    : util.ExcelReader.readPhongThi(path).size();
+                SwingUtilities.invokeLater(() -> {
+                    if (isCanBo) {
+                        totalMLabel.setText("Tổng: " + count + " cán bộ");
+                        totalMLabel.setForeground(new Color(0, 120, 0));
+                        mField.setText(String.valueOf(count));
+                    } else {
+                        totalNLabel.setText("Tổng: " + count + " phòng");
+                        totalNLabel.setForeground(new Color(0, 120, 0));
+                        nField.setText(String.valueOf(count));
+                    }
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> {
+                    if (isCanBo) totalMLabel.setText("❌ Lỗi");
+                    else         totalNLabel.setText("❌ Lỗi");
+                });
+            }
+        }).start();
     }
 
-    private void choosePhongThiFile() {
-        JFileChooser chooser = new JFileChooser();
-        int result = chooser.showOpenDialog(this);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            phongThiFileField.setText(chooser.getSelectedFile().getAbsolutePath());
-        }
-    }
-
-    private void sendFilesAndProcess() {
-        String canBoPath = canBoFileField.getText().trim();
+    private void sendParamsAndProcess() {
+        String canBoPath    = canBoFileField.getText().trim();
         String phongThiPath = phongThiFileField.getText().trim();
 
         if (canBoPath.isEmpty() || phongThiPath.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Vui lòng chọn cả hai file!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this,
+                "Vui lòng chọn cả hai file Excel!",
+                "Thiếu file", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
+        int n, m;
+        try {
+            n = Integer.parseInt(nField.getText().trim());
+            m = Integer.parseInt(mField.getText().trim());
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "n và m phải là số nguyên!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        if (n <= 0 || m <= 0) {
+            JOptionPane.showMessageDialog(this, "n và m phải lớn hơn 0!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        if (m < 2 * n) {
+            JOptionPane.showMessageDialog(this,
+                "Số cán bộ m=" + m + " không đủ!\nCần ít nhất 2×n = " + (2 * n) + " cán bộ.",
+                "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        final int finalN = n, finalM = m;
         sendBtn.setEnabled(false);
 
         new Thread(() -> {
             try {
                 SwingUtilities.invokeLater(() -> statusLabel.setText("⏳ Đang gửi file cán bộ..."));
                 if (!client.sendFile(canBoPath, "CANBO")) {
-                    SwingUtilities.invokeLater(() -> {
-                        statusLabel.setText("❌ Lỗi gửi file cán bộ!");
-                        statusLabel.setForeground(new Color(200, 0, 0));
-                        sendBtn.setEnabled(true);
-                    });
-                    return;
+                    showError("❌ Lỗi gửi file cán bộ!"); return;
                 }
 
                 SwingUtilities.invokeLater(() -> statusLabel.setText("⏳ Đang gửi file phòng thi..."));
                 if (!client.sendFile(phongThiPath, "PHONGTHI")) {
-                    SwingUtilities.invokeLater(() -> {
-                        statusLabel.setText("❌ Lỗi gửi file phòng thi!");
-                        statusLabel.setForeground(new Color(200, 0, 0));
-                        sendBtn.setEnabled(true);
-                    });
-                    return;
+                    showError("❌ Lỗi gửi file phòng thi!"); return;
                 }
 
-                SwingUtilities.invokeLater(() -> statusLabel.setText("⏳ Server đang xử lý phân công..."));
-                if (!client.processAndGetResults()) {
-                    SwingUtilities.invokeLater(() -> {
-                        statusLabel.setText("❌ Lỗi xử lý! Kiểm tra kết nối.");
-                        statusLabel.setForeground(new Color(200, 0, 0));
-                        sendBtn.setEnabled(true);
-                    });
-                    return;
+                SwingUtilities.invokeLater(() -> statusLabel.setText("⏳ Server đang phân công n=" + finalN + ", m=" + finalM + "..."));
+                if (!client.processFileWithNM(finalN, finalM)) {
+                    showError("❌ Lỗi xử lý!"); return;
                 }
 
                 int pc = client.getPhancongList().size();
                 int gs = client.getGiamsatList().size();
-
                 SwingUtilities.invokeLater(() -> {
                     displayPhancong();
                     displayGiamsat();
-                    statusLabel.setText("✅ Xong! Phân công: " + pc + " | Giám sát: " + gs);
+                    statusLabel.setText("✅ Xong! n=" + finalN + " phòng | m=" + finalM + " cán bộ | Phân công: " + pc + " | Giám sát: " + gs);
                     statusLabel.setForeground(new Color(0, 140, 0));
                     sendBtn.setEnabled(true);
                     saveBtn.setEnabled(true);
                     JOptionPane.showMessageDialog(ClientGUI.this,
-                        "✅ Nhận kết quả thành công!\n\nPhân công giám thị: " + pc + " bản ghi\nGiám sát hành lang: " + gs + " bản ghi",
+                        "✅ Phân công thành công!\n"
+                        + "n = " + finalN + " phòng thi\n"
+                        + "m = " + finalM + " cán bộ\n\n"
+                        + "Phân công giám thị: " + pc + " bản ghi\n"
+                        + "Giám sát hành lang: " + gs + " bản ghi",
                         "Thành công", JOptionPane.INFORMATION_MESSAGE);
                 });
             } catch (Exception e) {
-                SwingUtilities.invokeLater(() -> {
-                    statusLabel.setText("❌ Lỗi: " + e.getMessage());
-                    statusLabel.setForeground(new Color(200, 0, 0));
-                    sendBtn.setEnabled(true);
-                    JOptionPane.showMessageDialog(ClientGUI.this, "Lỗi: " + e.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
-                });
+                showError("❌ Lỗi: " + e.getMessage());
+                JOptionPane.showMessageDialog(ClientGUI.this, "Lỗi: " + e.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
             }
         }).start();
+    }
+
+    private void showError(String msg) {
+        SwingUtilities.invokeLater(() -> {
+            statusLabel.setText(msg);
+            statusLabel.setForeground(new Color(200, 0, 0));
+            sendBtn.setEnabled(true);
+        });
     }
 
 
